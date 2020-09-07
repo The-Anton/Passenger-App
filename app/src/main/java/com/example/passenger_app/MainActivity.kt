@@ -2,8 +2,10 @@ package com.example.passenger_app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -11,16 +13,14 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import kotlinx.android.synthetic.main.activity_main.*
 
 private const val PERMISSION_REQUEST = 10
 class MainActivity : AppCompatActivity() {
@@ -29,11 +29,41 @@ class MainActivity : AppCompatActivity() {
     private var hasNetwork = false
     private var locationGps: Location? = null
     private var locationNetwork: Location? = null
-    private var permissions = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    private var isLocationDisabled = true
+    private var permissions = arrayOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+    )
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+
+
+         val locationStateReceiver: BroadcastReceiver = object : BroadcastReceiver(){
+            @RequiresApi(Build.VERSION_CODES.P)
+            override fun onReceive(context: Context?, intent: Intent) {
+                if (intent.action.equals("android.location.PROVIDERS_CHANGED")) {
+                    Toast.makeText(
+                            context, "PROVIDERS_CHANGED",
+                    Toast.LENGTH_LONG
+                    ).show()
+                    if (locationManager.isLocationEnabled) {
+                        val fragment = HomeFragment()
+                        supportFragmentManager.beginTransaction().replace(
+                            R.id.container_main,
+                            fragment,
+                            fragment.javaClass.simpleName
+                        ).commit()
+                    }
+
+                }
+            }
+        }
+        val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
+        registerReceiver(locationStateReceiver, filter)
         supportActionBar?.setBackgroundDrawable(ColorDrawable(Color.parseColor("#ffffff")))
+
         val user = Firebase.auth.currentUser
         if (user != null){
            //ljdfl
@@ -53,25 +83,47 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-        BottomNavigationView.OnNavigationItemSelectedListener { item ->
+
+        val bottomNav : BottomNavigationView = findViewById(R.id.bottom_navigation)
+        bottomNav.setOnNavigationItemSelectedListener { item ->
             when(item.itemId) {
                 R.id.home -> {
                     // Respond to navigation item 1 click
+                    val fragment = HomeFragment()
+                    supportFragmentManager.beginTransaction().replace(
+                        R.id.container_main,
+                        fragment,
+                        fragment.javaClass.simpleName
+                    ).commit()
                     true
                 }
                 R.id.rewards -> {
+                    val fragment = RewardFragment()
+                    supportFragmentManager.beginTransaction().replace(
+                        R.id.container_main,
+                        fragment,
+                        fragment.javaClass.simpleName
+                    ).commit()
                     // Respond to navigation item 2 click
-                    val intent = Intent(this,Login::class.java)
-                    startActivity(intent)
                     true
                 }
                 R.id.profile -> {
+                    val fragment = ProfileFragment()
+                    supportFragmentManager.beginTransaction().replace(
+                        R.id.container_main,
+                        fragment,
+                        fragment.javaClass.simpleName
+                    ).commit()
+                    // Respond to navigation item 2 click
                     true
-
                 }
                 else -> false
             }
         }
+
+
+
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkPermission(permissions)) {
                 getLocation()
@@ -84,6 +136,10 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+
+
+
+
     @SuppressLint("MissingPermission")
     private fun getLocation() {
         val uid = Firebase.auth.currentUser?.uid
@@ -92,51 +148,76 @@ class MainActivity : AppCompatActivity() {
         hasNetwork = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         if (hasGps || hasNetwork) {
 
+            isLocationDisabled = false
             if (hasGps) {
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0F, object :
-                    LocationListener {
-                    override fun onLocationChanged(p0: Location) {
-                        if (p0 != null) {
-                            locationGps = p0
-                            if (uid != null) {
-                                Firebase.firestore.collection("Passengers").document(uid).update("Longitude",
-                                    locationGps!!.longitude,"Latitude", locationGps!!.latitude)
-                                    .addOnSuccessListener {
-                                        Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
-                                    }
-                                    .addOnFailureListener {
-                                        Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
-                                    }
+                val fragment = HomeFragment()
+                supportFragmentManager.beginTransaction().replace(
+                    R.id.container_main,
+                    fragment,
+                    fragment.javaClass.simpleName
+                ).commit()
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    5000,
+                    0F,
+                    object :
+                        LocationListener {
+                        override fun onLocationChanged(p0: Location) {
+                            if (p0 != null) {
+                                locationGps = p0
+                                if (uid != null) {
+                                    Firebase.firestore.collection("Passengers").document(uid)
+                                        .update(
+                                            "Longitude",
+                                            locationGps!!.longitude,
+                                            "Latitude",
+                                            locationGps!!.latitude
+                                        )
+                                        .addOnSuccessListener {
+                                            //Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
+                                        }
+                                        .addOnFailureListener {
+                                            //Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
+                                        }
+                                }
                             }
                         }
-                    }
 
-                })
+                    })
 
                 val localGpsLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
                 if (localGpsLocation != null)
                     locationGps = localGpsLocation
             }
             if (hasNetwork) {
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5000, 0F, object :
-                    LocationListener {
-                    override fun onLocationChanged(p0: Location) {
-                        if (p0 != null) {
-                            locationNetwork = p0
-                            if (uid != null) {
-                                Firebase.firestore.collection("Passengers").document(uid).update("Longitude",
-                                    locationNetwork!!.longitude,"Latitude", locationNetwork!!.latitude)
-                                    .addOnSuccessListener {
-                                        Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
-                                    }
-                                    .addOnFailureListener {
-                                        Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
-                                    }
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    5000,
+                    0F,
+                    object :
+                        LocationListener {
+                        override fun onLocationChanged(p0: Location) {
+                            if (p0 != null) {
+                                locationNetwork = p0
+                                if (uid != null) {
+                                    Firebase.firestore.collection("Passengers").document(uid)
+                                        .update(
+                                            "Longitude",
+                                            locationNetwork!!.longitude,
+                                            "Latitude",
+                                            locationNetwork!!.latitude
+                                        )
+                                        .addOnSuccessListener {
+                                            //Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
+                                        }
+                                        .addOnFailureListener {
+                                            //Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
+                                        }
+                                }
                             }
                         }
-                    }
 
-                })
+                    })
 
                 val localNetworkLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
                 if (localNetworkLocation != null)
@@ -146,33 +227,43 @@ class MainActivity : AppCompatActivity() {
             if(locationGps!= null && locationNetwork!= null){
                 if(locationGps!!.accuracy > locationNetwork!!.accuracy){
                     if (uid != null) {
-                        Firebase.firestore.collection("Passengers").document(uid).update("Longitude",
-                            locationGps!!.longitude,"Latitude", locationGps!!.latitude)
+                        Firebase.firestore.collection("Passengers").document(uid).update(
+                            "Longitude",
+                            locationGps!!.longitude, "Latitude", locationGps!!.latitude
+                        )
                             .addOnSuccessListener {
-                                Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
+                                //Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
                             }
                             .addOnFailureListener {
-                                Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
+                                //Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
                             }
                     }
                 }else{
                     if (uid != null) {
-                        Firebase.firestore.collection("Passengers").document(uid).update("Longitude",
-                            locationNetwork!!.longitude,"Latitude", locationNetwork!!.latitude)
+                        Firebase.firestore.collection("Passengers").document(uid).update(
+                            "Longitude",
+                            locationNetwork!!.longitude, "Latitude", locationNetwork!!.latitude
+                        )
                             .addOnSuccessListener {
-                                Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
+                                //Snackbar.make(button3, "Location Data feeds start", Snackbar.LENGTH_SHORT).show()
                             }
                             .addOnFailureListener {
-                                Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
+                                //Snackbar.make(button3, "Failed location feed", Snackbar.LENGTH_SHORT).show()
                             }
                     }
                 }
+            }else{
+                val fragment = NoLocationFragment()
+                supportFragmentManager.beginTransaction().replace(
+                    R.id.container_main,
+                    fragment,
+                    fragment.javaClass.simpleName
+                ).commit()
             }
-
-        } else {
-            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         }
-    }
+
+        }
+
     override fun onResume() {
         getLocation()
         super.onResume()
@@ -186,18 +277,28 @@ class MainActivity : AppCompatActivity() {
         return allSuccess
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSION_REQUEST) {
             var allSuccess = true
             for (i in permissions.indices) {
                 if (grantResults[i] == PackageManager.PERMISSION_DENIED) {
                     allSuccess = false
-                    val requestAgain = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && shouldShowRequestPermissionRationale(permissions[i])
+                    val requestAgain = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && shouldShowRequestPermissionRationale(
+                        permissions[i]
+                    )
                     if (requestAgain) {
                         Toast.makeText(this, "Permission denied", Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this, "Go to settings and enable the permission", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this,
+                            "Go to settings and enable the permission",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }
